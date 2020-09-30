@@ -1,139 +1,124 @@
-import _ from "lodash";
-import {default as axios, Method} from "axios";
 import * as msal from "@azure/msal-browser";
-import {
-    Auth,
-    Request,
-    Graph,
-    CacheOptions,
-    Options,
-    DataObject,
-    CallbackQueueObject,
-    AuthError,
-    AuthResponse,
-    MSALBasic,
-    GraphEndpoints,
-    GraphDetailedObject,
-    CategorizedGraphRequests
-} from './types';
 
-export class MSAL implements MSALBasic {
-    private lib: any;
+import { iMSAL, DataObject, Options, Auth, CacheOptions, Request } from './types';
+
+export class MSAL implements iMSAL {
+    private msalLibrary: any;
     private tokenExpirationTimers: {[key: string]: undefined | number} = {};
     public data: DataObject = {
         isAuthenticated: false,
         accessToken: '',
         idToken: '',
-        user: {},
-        graph: {},
-        custom: {}
+        user: { name: '', userName: ''},
+        custom: {},
+        account: {
+            accountIdentifier: "",
+            homeAccountIdentifier: "",
+            userName: "",
+            name: "",
+            idToken: {},
+            idTokenClaims: {},
+            sid: "",
+            environment: "",
+        }
     };
-    public callbackQueue: CallbackQueueObject[] = [];
-    private readonly auth: Auth = {
-        clientId: '',
-        authority: '',
-        tenantId: 'common',
-        tenantName: 'login.microsoftonline.com',
-        validateAuthority: true,
-        redirectUri: window.location.href,
-        postLogoutRedirectUri: window.location.href,
-        navigateToLoginRequestUrl: true,
-        requireAuthOnInitialize: false,
-        autoRefreshToken: true,
+    // Config object to be passed to Msal on creation.
+    // For a full list of msal.js configuration parameters, 
+    // visit https://azuread.github.io/microsoft-authentication-library-for-js/docs/msal/modules/_authenticationparameters_.html
+    private auth: Auth = {
+        clientId: "",
+        authority: "",
+        redirectUri: "",
         onAuthentication: (error, response) => {},
         onToken: (error, response) => {},
         beforeSignOut: () => {}
     };
-    private readonly cache: CacheOptions = {
-        cacheLocation: 'localStorage',
-        storeAuthStateInCookie: true
+    private cache: CacheOptions = {
+        cacheLocation: "sessionStorage", // This configures where your cache will be stored
+        storeAuthStateInCookie: false, // Set this to "true" if you are having issues on IE11 or Edge
     };
-    private readonly request: Request = {
-        scopes: ["user.read"]
+    // Add here scopes for id token to be used at MS Identity Platform endpoints.
+    private loginRequest: Request = {
+        scopes: ["openid", "profile", "User.Read"]
     };
-    private readonly graph: Graph = {
-        callAfterInit: false,
-        endpoints: {profile: '/me'},
-        baseUrl: 'https://graph.microsoft.com/v1.0',
-        onResponse: (response) => {}
+
+    // Add here scopes for access token to be used at MS Graph API endpoints.
+    private tokenRequest: Request = {
+        scopes: ["User.Read"]
     };
-    constructor(private readonly options: Options) {
+
+    constructor(options: Options) {
         if (!options.auth.clientId) {
             throw new Error('auth.clientId is required');
         }
         this.auth = Object.assign(this.auth, options.auth);
         this.cache = Object.assign(this.cache, options.cache);
-        this.request = Object.assign(this.request, options.request);
-        this.graph = Object.assign(this.graph, options.graph);
-
-        this.lib = new msal.PublicClientApplication({
-            auth: {
-                clientId: this.auth.clientId,
-                authority: this.auth.authority || `https://login.microsoftonline.com/${this.auth.tenantId}`,
-                redirectUri: this.auth.redirectUri,
-                postLogoutRedirectUri: this.auth.postLogoutRedirectUri,
-                navigateToLoginRequestUrl: this.auth.navigateToLoginRequestUrl
-            },
-            cache: this.cache,
-            system: options.system
-        });
-
-        this.getSavedCallbacks();
-        this.executeCallbacks();
-        // Register Callbacks for redirect flow
-        this.lib.handleRedirectCallback((error: AuthError, response: AuthResponse) => {
-            if (!this.isAuthenticated()) {
-                this.saveCallback('auth.onAuthentication', error, response);
-            } else {
-                this.acquireToken();
-            }
-        });
-
-        if (this.auth.requireAuthOnInitialize) {
-            this.signIn()
+        this.loginRequest = Object.assign(this.loginRequest, options.loginRequest);
+        this.tokenRequest = Object.assign(this.tokenRequest, options.tokenRequest);
+        
+        const config: msal.Configuration = {
+            auth: this.auth,
+            cache: this.cache
         }
+        this.msalLibrary = new msal.PublicClientApplication(config);
+        /*this.signIn()
         this.data.isAuthenticated = this.isAuthenticated();
-        if (this.data.isAuthenticated) {
-            this.data.user = this.lib.getAccount();
-            this.acquireToken().then(() => {
-                if (this.graph.callAfterInit) {
-                    this.initialMSGraphCall();
-                }
-            });
-        }
-        this.getStoredCustomData();
+        if (this.isAuthenticated()) {
+            this.acquireToken()
+        }*/
     }
     signIn() {
-        if (!this.lib.isCallback(window.location.hash) && !this.lib.getAccount()) {
-            // request can be used for login or token request, however in more complex situations this can have diverging options
-            this.lib.loginPopup(this.request).then(
-                loginResponse => {
-                    console.log('id_token acquired at: ' + new Date().toString());
+        return this.msalLibrary.loginPopup(this.loginRequest).then(loginResponse => {
+            console.log(loginResponse);
+            if (loginResponse !== null) {
+                this.data.user.userName = loginResponse.account.username;
+                this.data.accessToken = loginResponse.accessToken;
+                this.data.idToken = loginResponse.idToken;
+                this.data.account = loginResponse.account
+            } else {
+                // need to call getAccount here?
+                const currentAccounts = this.msalLibrary.getAllAccounts();
+                console.log('all accounts: ');
+                console.log(currentAccounts);
+                if (currentAccounts === null) {
+                    return;
+                } else if (currentAccounts.length > 1) {
+                    // Add choose account code here
+                } else if (currentAccounts.length === 1) {
+                    this.data.user.userName = currentAccounts[0].username;
+                    this.data.user.userName = currentAccounts[0].name;
+                    console.log('this.data: ');
+                    console.log(this.data);
                 }
-            )
-        }
+            }
+        }).catch(function (error) {
+            console.log(error);
+        });
     }
-    async signOut() {
-        if (this.options.auth.beforeSignOut) {
-            await this.options.auth.beforeSignOut(this);
-        }
-        this.lib.logout();
+    signOut() {
+        const logoutRequest = {
+            account: this.msalLibrary.getAccountByUsername(this.data.user.userName)
+        };
+        this.msalLibrary.logout(logoutRequest);
+        this.data.accessToken = "";
+        this.data.idToken = "";
+        this.data.user.userName = "";
     }
-    isAuthenticated() {
-        return !this.lib.isCallback(window.location.hash) && !!this.lib.getAccount();
-    }
-    async acquireToken(request = this.request, retries = 0) {
+    async acquireToken(request = this.loginRequest, retries = 0) {
+        this.loginRequest.account = this.data.account
+        console.log('in acquireToken!');
         try {
-            //Always start with acquireTokenSilent to obtain a token in the signed in user from cache
-            const response = await this.lib.acquireTokenSilent(request);
+            const response = await this.msalLibrary.acquireTokenSilent(request);
             this.handleTokenResponse(null, response);
-            return response;
         } catch (error) {
-            // Upon acquireTokenSilent failure (due to consent or interaction or login required ONLY)
-            // Call acquireTokenRedirect
-            if (this.requiresInteraction(error.errorCode)) {
-                this.lib.acquireTokenRedirect(request);
+            console.log("silent token acquisition fails.");
+            if (error instanceof msal.InteractionRequiredAuthError) {
+                console.log("acquiring token using popup");
+                return this.msalLibrary.acquireTokenPopup(request).catch(error => {
+                    console.error(error);
+                });
             } else if(retries > 0) {
+                console.log('in acquireToken with retries: ' + retries)
                 return await new Promise((resolve) => {
                     setTimeout(async () => {
                         const res = await this.acquireToken(request, retries-1);
@@ -144,30 +129,32 @@ export class MSAL implements MSALBasic {
             return false;
         }
     }
+    isAuthenticated() {
+        if (this.msalLibrary.getAllAccounts() === null) {
+            return false
+        } else {
+            return true
+        }
+    }
     private handleTokenResponse(error, response) {
         if (error) {
-            this.saveCallback('auth.onToken', error, null);
             return;
         }
-        let setCallback = false;
-        if(response.tokenType === 'access_token' && this.data.accessToken !== response.accessToken) {
+        if(this.data.accessToken !== response.accessToken) {
             this.setToken('accessToken', response.accessToken, response.expiresOn, response.scopes);
-            console.log('got accessToken: ' + response.accessToken)
-            setCallback = true;
+            console.log('got new accessToken: ' + response.accessToken)
         }
         if(this.data.idToken !== response.idToken.rawIdToken) {
             this.setToken('idToken', response.idToken.rawIdToken, new Date(response.idToken.expiration * 1000), [this.auth.clientId]);
-            console.log('got idToken: ' + response.idToken.rawIdToken)
-            setCallback = true;
-        }
-        if(setCallback) {
-            this.saveCallback('auth.onToken', null, response);
+            console.log('got new idToken: ' + response.idToken.rawIdToken)
         }
     }
     private setToken(tokenType:string, token: string, expiresOn: Date, scopes: string[]) {
-        const expirationOffset = this.lib.config.system.tokenRenewalOffsetSeconds * 1000;
+        const expirationOffset = 1 * 1000;
         const expiration = expiresOn.getTime() - (new Date()).getTime() - expirationOffset;
+        console.log('set')
         if (expiration >= 0) {
+            console.log('setting token: ' + tokenType + " with val: " + token)
             this.data[tokenType] = token;
         }
         if (this.tokenExpirationTimers[tokenType]) clearTimeout(this.tokenExpirationTimers[tokenType]);
@@ -178,235 +165,5 @@ export class MSAL implements MSALBasic {
                 this.data[tokenType] = '';
             }
         }, expiration)
-    }
-    private requiresInteraction(errorCode: string) {
-        if (!errorCode || !errorCode.length) {
-            return false;
-        }
-        return errorCode === "consent_required" ||
-            errorCode === "interaction_required" ||
-            errorCode === "login_required";
-    }
-    // MS GRAPH
-    async initialMSGraphCall() {
-        const {onResponse: callback} = this.graph;
-        let initEndpoints = this.graph.endpoints;
-
-        if (typeof initEndpoints === 'object' && !_.isEmpty(initEndpoints)) {
-            const resultsObj = {};
-            const forcedIds: string[] = [];
-            try {
-                const endpoints: { [id: string]: GraphDetailedObject & { force?: Boolean } } = {};
-                for (const id in initEndpoints) {
-                    endpoints[id] = this.getEndpointObject(initEndpoints[id]);
-                    if (endpoints[id].force) {
-                        forcedIds.push(id);
-                    }
-                }
-                let storedIds: string[] = [];
-                let storedData = this.lib.store.getItem(`msal.msgraph-${this.data.accessToken}`);
-                if (storedData) {
-                    storedData = JSON.parse(storedData);
-                    storedIds = Object.keys(storedData);
-                    Object.assign(resultsObj, storedData);
-                }
-                const {singleRequests, batchRequests} = this.categorizeRequests(endpoints, _.difference(storedIds, forcedIds));
-                const singlePromises = singleRequests.map(async endpoint => {
-                    const res = {};
-                    res[endpoint.id as string] = await this.msGraph(endpoint);
-                    return res;
-                });
-                const batchPromises = Object.keys(batchRequests).map(key => {
-                    const batchUrl = (key === 'default') ? undefined : key;
-                    return this.msGraph(batchRequests[key], batchUrl);
-                });
-                const mixedResults = await Promise.all([...singlePromises, ...batchPromises]);
-                mixedResults.map((res) => {
-                    for (const key in res) {
-                        res[key] = res[key].body;
-                    }
-                    Object.assign(resultsObj, res);
-                });
-                const resultsToSave = {...resultsObj};
-                forcedIds.map(id => delete resultsToSave[id]);
-                this.lib.store.setItem(`msal.msgraph-${this.data.accessToken}`, JSON.stringify(resultsToSave));
-                this.data.graph = resultsObj;
-            } catch (error) {
-                console.error(error);
-            }
-            if (callback)
-                this.saveCallback('graph.onResponse', this.data.graph);
-        }
-    }
-    async msGraph(endpoints: GraphEndpoints, batchUrl: string | undefined = undefined) {
-        try {
-            if (Array.isArray(endpoints)) {
-                return await this.executeBatchRequest(endpoints, batchUrl);
-            } else {
-                return await this.executeSingleRequest(endpoints);
-            }
-        } catch (error) {
-            throw error;
-        }
-    }
-    private async executeBatchRequest(endpoints: Array<string | GraphDetailedObject>, batchUrl = this.graph.baseUrl) {
-        const requests = endpoints.map((endpoint, index) => this.createRequest(endpoint, index));
-        const {data} = await axios.request({
-            url: `${batchUrl}/$batch`,
-            method: 'POST' as Method,
-            data: {requests: requests},
-            headers: {Authorization: `Bearer ${this.data.accessToken}`},
-            responseType: 'json'
-        });
-        let result = {};
-        data.responses.map(response => {
-            let key = response.id;
-            delete response.id;
-            return result[key] = response
-        });
-        // Format result
-        const keys = Object.keys(result);
-        const numKeys = keys.sort().filter((key, index) => {
-            if (key.search('defaultID-') === 0) {
-                key = key.replace('defaultID-', '');
-            }
-            return parseInt(key) === index;
-        });
-        if (numKeys.length === keys.length) {
-            result = _.values(result);
-        }
-        return result;
-    }
-    private async executeSingleRequest(endpoint: string | GraphDetailedObject) {
-        const request = this.createRequest(endpoint);
-        if (request.url.search('http') !== 0) {
-            request.url = this.graph.baseUrl + request.url;
-        }
-        const res = await axios.request(_.defaultsDeep(request, {
-            url: request.url,
-            method: request.method as Method,
-            responseType: 'json',
-            headers: {Authorization: `Bearer ${this.data.accessToken}`}
-        }));
-        return {
-            status: res.status,
-            headers: res.headers,
-            body: res.data
-        }
-    }
-    private createRequest(endpoint: string | GraphDetailedObject, index = 0) {
-        const request = {
-            url: '',
-            method: 'GET',
-            id: `defaultID-${index}`
-        };
-        endpoint = this.getEndpointObject(endpoint);
-        if (endpoint.url) {
-            Object.assign(request, endpoint);
-        } else {
-            throw ({error: 'invalid endpoint', endpoint: endpoint});
-        }
-        return request;
-    }
-    private categorizeRequests(endpoints: { [id:string]: GraphDetailedObject & { batchUrl?: string } }, excludeIds: string[]): CategorizedGraphRequests {
-        let res: CategorizedGraphRequests = {
-            singleRequests: [],
-            batchRequests: {}
-        };
-        for (const key in endpoints) {
-            const endpoint = {
-                id: key,
-                ...endpoints[key]
-            };
-            if (!_.includes(excludeIds, key)) {
-                if (endpoint.batchUrl) {
-                    const {batchUrl} = endpoint;
-                    delete endpoint.batchUrl;
-                    if (!res.batchRequests.hasOwnProperty(batchUrl)) {
-                        res.batchRequests[batchUrl] = [];
-                    }
-                    res.batchRequests[batchUrl].push(endpoint);
-                } else {
-                    res.singleRequests.push(endpoint);
-                }
-            }
-        }
-        return res;
-    }
-    private getEndpointObject(endpoint: string | GraphDetailedObject): GraphDetailedObject {
-        if (typeof endpoint === "string") {
-            endpoint = {url: endpoint}
-        }
-        if (typeof endpoint === "object" && !endpoint.url) {
-            throw new Error('invalid endpoint url')
-        }
-        return endpoint;
-    }
-    // CUSTOM DATA
-    saveCustomData(key: string, data: any) {
-        if (!this.data.custom.hasOwnProperty(key)) {
-            this.data.custom[key] = null;
-        }
-        this.data.custom[key] = data;
-        this.storeCustomData();
-    }
-    private storeCustomData() {
-        if (!_.isEmpty(this.data.custom)) {
-            this.lib.store.setItem('msal.custom', JSON.stringify(this.data.custom));
-        } else {
-            this.lib.store.removeItem('msal.custom');
-        }
-    }
-    private getStoredCustomData() {
-        let customData = {};
-        const customDataStr = this.lib.store.getItem('msal.custom');
-        if (customDataStr) {
-            customData = JSON.parse(customDataStr);
-        }
-        this.data.custom = customData;
-    }
-    // CALLBACKS
-    private saveCallback(callbackPath: string, ...args: any[]) {
-        if (_.get(this.options, callbackPath)) {
-            const callbackQueueObject: CallbackQueueObject = {
-                id: _.uniqueId(`cb-${callbackPath}`),
-                callback: callbackPath,
-                arguments: args
-            };
-            _.remove(this.callbackQueue, (obj) => obj.id === callbackQueueObject.id);
-            this.callbackQueue.push(callbackQueueObject);
-            this.storeCallbackQueue();
-            this.executeCallbacks([callbackQueueObject]);
-        }
-    }
-    private getSavedCallbacks() {
-        const callbackQueueStr = this.lib.store.getItem('msal.callbackqueue');
-        if (callbackQueueStr) {
-            this.callbackQueue = [...this.callbackQueue, ...JSON.parse(callbackQueueStr)];
-        }
-    }
-    private async executeCallbacks(callbacksToExec: CallbackQueueObject[] = this.callbackQueue) {
-        if (callbacksToExec.length) {
-            for (let i in callbacksToExec) {
-                const cb = callbacksToExec[i];
-                const callback = _.get(this.options, cb.callback);
-                try {
-                    await callback(this, ...cb.arguments);
-                    _.remove(this.callbackQueue, function (currentCb) {
-                        return cb.id === currentCb.id;
-                    });
-                    this.storeCallbackQueue();
-                } catch (e) {
-                    console.warn(`Callback '${cb.id}' failed with error: `, e.message);
-                }
-            }
-        }
-    }
-    private storeCallbackQueue() {
-        if (this.callbackQueue.length) {
-            this.lib.store.setItem('msal.callbackqueue', JSON.stringify(this.callbackQueue));
-        } else {
-            this.lib.store.removeItem('msal.callbackqueue');
-        }
     }
 }

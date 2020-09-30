@@ -1,11 +1,62 @@
 {
-  "name": "vue-msal",
-  "version": "3.2.0",
-  "description": "Vue plugin for using Microsoft Authentication Library (MSAL)",
-  "main": "dist/plugin.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "_from": "vue-msal-2@^1.2.14",
+  "_id": "vue-msal-2@1.2.14",
+  "_inBundle": false,
+  "_integrity": "sha512-4KXBR/DobPhD5Vo6X1z+LjW/H2JYlAv2SRBCG9folWs2tP9QZHus5zIjWrsUE2WpHIfsSJcu87EM9PVDCRUCug==",
+  "_location": "/vue-msal-2",
+  "_phantomChildren": {
+    "ms": "2.0.0"
   },
+  "_requested": {
+    "type": "range",
+    "registry": true,
+    "raw": "vue-msal-2@^1.2.14",
+    "name": "vue-msal-2",
+    "escapedName": "vue-msal-2",
+    "rawSpec": "^1.2.14",
+    "saveSpec": null,
+    "fetchSpec": "^1.2.14"
+  },
+  "_requiredBy": [
+    "/"
+  ],
+  "_resolved": "https://registry.npmjs.org/vue-msal-2/-/vue-msal-2-1.2.14.tgz",
+  "_shasum": "d8b3122416a09a9acb264021ef41880f8cbabc2b",
+  "_spec": "vue-msal-2@^1.2.14",
+  "_where": "C:\\projects\\genemedics-web",
+  "author": {
+    "name": "Yoeran Kaniok"
+  },
+  "bugs": {
+    "url": "https://github.com/yoerankaniok/vue-msal/issues"
+  },
+  "bundleDependencies": false,
+  "contributors": [
+    {
+      "name": "Marios Vertopoulos"
+    },
+    {
+      "name": "Yoeran Kaniok"
+    }
+  ],
+  "dependencies": {
+    "@azure/msal-browser": "^2.0.0-beta.4",
+    "axios": "^0.19.2",
+    "lodash": "^4.17.19",
+    "msal": "^1.4.0"
+  },
+  "deprecated": false,
+  "description": "Vue plugin for using Microsoft Authentication Library (MSAL 2.0) (forked from vue-msal Marios Vertopoulos)",
+  "devDependencies": {
+    "@types/lodash": "^4.14.157"
+  },
+  "directories": {
+    "lib": "lib"
+  },
+  "eslintIgnore": [
+    "lib/*.*"
+  ],
+  "homepage": "https://github.com/yoerankaniok/vue-msal#readme",
   "keywords": [
     "vue",
     "msal",
@@ -13,33 +64,18 @@
     "authentication",
     "sso"
   ],
-  "author": "Marios Vertopoulos",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/mvertopoulos/vue-msal/issues"
-  },
-  "contributors": [
-    {
-      "name": "Marios Vertopoulos"
-    }
-  ],
-  "eslintIgnore": [
-    "lib/*.*"
-  ],
-  "homepage": "https://github.com/mvertopoulos/vue-msal#readme",
+  "main": "dist/plugin.js",
+  "name": "vue-msal-2",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mvertopoulos/vue-msal.git"
+    "url": "git+https://github.com/yoerankaniok/vue-msal.git"
   },
-  "dependencies": {
-    "@azure/msal-browser": "^2.0.0-beta.4",
-    "axios": "^0.19.0",
-    "lodash": "^4.17.15"
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "devDependencies": {
-    "@types/lodash": "^4.14.138"
-  }
+  "version": "1.2.14"
 }
